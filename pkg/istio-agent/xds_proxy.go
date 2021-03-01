@@ -63,9 +63,22 @@ const (
 	defaultClientMaxReceiveMessageSize = math.MaxInt32
 	defaultInitialConnWindowSize       = 1024 * 1024            // default gRPC InitialWindowSize
 	defaultInitialWindowSize           = 1024 * 1024            // default gRPC ConnWindowSize
-	sendTimeout                        = 5 * time.Second        // default upstream send timeout.
 	watchDebounceDelay                 = 100 * time.Millisecond // file watcher event debounce delay.
 )
+
+var (
+	sendTimeout = 5 * time.Second // default upstream send timeout.
+)
+
+func init() {
+	timeout := os.Getenv("XDS_SEND_TIMEOUT")
+	if timeout != "" {
+		d, _ := time.ParseDuration(timeout)
+		if d >= time.Millisecond {
+			sendTimeout = d
+		}
+	}
+}
 
 const (
 	xdsUdsPath = "./etc/istio/proxy/XDS"
