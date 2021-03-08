@@ -236,7 +236,7 @@ func (s *DiscoveryServer) StreamAggregatedResources(stream discovery.AggregatedD
 	// go routine. If go grpc adds gochannel support for streams this will not be needed.
 	// This also detects close.
 	var receiveError error
-	reqChannel := make(chan *discovery.DiscoveryRequest, 1)
+	reqChannel := make(chan *discovery.DiscoveryRequest, 10)
 	go s.receive(con, reqChannel, &receiveError)
 
 	for {
@@ -588,6 +588,7 @@ func (s *DiscoveryServer) pushConnection(con *Connection, pushEv *Event) error {
 // PushOrder defines the order that updates will be pushed in. Any types not listed here will be pushed in random
 // order after the types listed here
 var PushOrder = []string{v3.ClusterType, v3.EndpointType, v3.ListenerType, v3.RouteType, v3.SecretType}
+
 var KnownPushOrder = map[string]struct{}{
 	v3.ClusterType:  {},
 	v3.EndpointType: {},
