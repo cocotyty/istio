@@ -163,6 +163,10 @@ type XdsResourceGenerator interface {
 	Generate(proxy *Proxy, push *PushContext, w *WatchedResource, updates *PushRequest) Resources
 }
 
+type XdsRequestHandler interface {
+	Handle(req *discovery.DiscoveryRequest, proxy *Proxy) error
+}
+
 // Proxy contains information about an specific instance of a proxy (envoy sidecar, gateway,
 // etc). The Proxy is initialized when a sidecar connects to Pilot, and populated from
 // 'node' info in the protocol as well as data extracted from registries.
@@ -206,6 +210,9 @@ type Proxy struct {
 
 	// the sidecarScope associated with the proxy previously
 	PrevSidecarScope *SidecarScope
+
+	// the dns-egress sidecarScope associated with the proxy
+	DNSEgressSidecarScope *SidecarScope
 
 	// The merged gateways associated with the proxy if this is a Router
 	MergedGateway *MergedGateway
@@ -677,6 +684,7 @@ func (node *Proxy) SetSidecarScope(ps *PushContext) {
 	if node.Type == SidecarProxy {
 		workloadLabels := labels.Collection{node.Metadata.Labels}
 		node.SidecarScope = ps.getSidecarScope(node, workloadLabels)
+		node.DNSEgressSidecarScope = ps.getDNSSidecarScope(node, workloadLabels)
 	} else {
 		// Gateways should just have a default scope with egress: */*
 		node.SidecarScope = DefaultSidecarScopeForNamespace(ps, node.ConfigNamespace)

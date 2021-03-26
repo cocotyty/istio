@@ -16,6 +16,7 @@ package model
 
 import (
 	"encoding/json"
+	"istio.io/istio/pilot/pkg/dns/schemas"
 	"net"
 	"sort"
 	"strings"
@@ -179,6 +180,8 @@ type PushContext struct {
 
 	// sidecars for each namespace
 	sidecarsByNamespace map[string][]*SidecarScope
+	// sidecars for each namespace
+	dnsSidecarsByNamespace map[string][]*SidecarScope
 
 	// envoy filters for each namespace including global config namespace
 	envoyFiltersByNamespace map[string][]*EnvoyFilterWrapper
@@ -740,8 +743,40 @@ func (ps *PushContext) getSidecarScope(proxy *Proxy, workloadLabels labels.Colle
 			return wrapper
 		}
 	}
-
+	wrapper := ps.getDNSSidecarScope(proxy, workloadLabels)
+	if wrapper != nil {
+		return wrapper
+	}
 	return DefaultSidecarScopeForNamespace(ps, proxy.ConfigNamespace)
+}
+
+func (ps *PushContext) getDNSSidecarScope(proxy *Proxy, workloadLabels labels.Collection) *SidecarScope {
+	if sidecars, ok := ps.dnsSidecarsByNamespace[proxy.ConfigNamespace]; ok {
+		// TODO: logic to merge multiple sidecar resources
+		// Currently we assume that there will be only one sidecar config for a namespace.
+		for _, wrapper := range sidecars {
+			if wrapper.Config != nil && wrapper.Config.Spec != nil {
+				sidecar := wrapper.Config.Spec.(*networking.Sidecar)
+				// if there is no workload selector, the config applies to all workloads
+				// if there is a workload selector, check for matching workload labels
+				if sidecar.GetWorkloadSelector() != nil {
+					workloadSelector := labels.Instance(sidecar.GetWorkloadSelector().GetLabels())
+					// exclude workload selector that not match
+					if !workloadLabels.IsSupersetOf(workloadSelector) {
+						continue
+					}
+				}
+
+				// it is guaranteed sidecars with selectors are put in front
+				// and the sidecars are sorted by creation timestamp,
+				// return exact/wildcard matching one directly
+				return wrapper
+			}
+			// this happens at last, it is the default sidecar scope
+			return wrapper
+		}
+	}
+	return nil
 }
 
 // DestinationRule returns a destination rule for a service name in a given domain.
@@ -1302,6 +1337,36 @@ func (ps *PushContext) initDefaultExportMaps() {
 	}
 }
 
+func (ps *PushContext) initDNSSidecarScopes(env *Environment) error {
+	sidecarConfigs, err := env.List(schemas.EgressSidecarGVK, NamespaceAll)
+	if err != nil {
+		return err
+	}
+	sortConfigByCreationTime(sidecarConfigs)
+	ps.dnsSidecarsByNamespace = make(map[string][]*SidecarScope, len(sidecarConfigs))
+	for _, sidecarConfig := range sidecarConfigs {
+		sidecarConfig := sidecarConfig
+		ps.dnsSidecarsByNamespace[sidecarConfig.Namespace] = append(ps.dnsSidecarsByNamespace[sidecarConfig.Namespace],
+			ConvertToSidecarScope(ps, &sidecarConfig, sidecarConfig.Namespace))
+	}
+	return nil
+}
+
+func (ps *PushContext) getMatchedDNSHosts(namespace string, selector map[string]string) *networking.IstioEgressListener {
+	sidecars, ok := ps.dnsSidecarsByNamespace[namespace]
+	if !ok {
+		return nil
+	}
+	workloadLabels := labels.Collection{selector}
+	for _, sidecar := range sidecars {
+		nSidecar := sidecar.Config.Spec.(*networking.Sidecar)
+		if workloadLabels.IsSupersetOf(nSidecar.WorkloadSelector.Labels) {
+			return nSidecar.Egress[0]
+		}
+	}
+	return nil
+}
+
 // initSidecarScopes synthesizes Sidecar CRDs into objects called
 // SidecarScope.  The SidecarScope object is a semi-processed view of the
 // service registry, and config state associated with the sidecar CRD. The
@@ -1315,6 +1380,10 @@ func (ps *PushContext) initDefaultExportMaps() {
 // with the proxy and derive listeners/routes/clusters based on the sidecar
 // scope.
 func (ps *PushContext) initSidecarScopes(env *Environment) error {
+	if err := ps.initDNSSidecarScopes(env); err != nil {
+		return err
+	}
+
 	sidecarConfigs, err := env.List(gvk.Sidecar, NamespaceAll)
 	if err != nil {
 		return err
@@ -1328,6 +1397,10 @@ func (ps *PushContext) initSidecarScopes(env *Environment) error {
 	for _, sidecarConfig := range sidecarConfigs {
 		sidecar := sidecarConfig.Spec.(*networking.Sidecar)
 		if sidecar.WorkloadSelector != nil {
+			dnsHostsEgress := ps.getMatchedDNSHosts(sidecarConfig.Namespace, sidecar.WorkloadSelector.Labels)
+			if dnsHostsEgress != nil {
+				sidecar.Egress = append(sidecar.Egress, dnsHostsEgress)
+			}
 			sidecarConfigWithSelector = append(sidecarConfigWithSelector, sidecarConfig)
 		} else {
 			sidecarsWithoutSelectorByNamespace[sidecarConfig.Namespace] = struct{}{}

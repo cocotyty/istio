@@ -41,6 +41,8 @@ type LocalDNSServer struct {
 	// Optimizations to save space and time
 	proxyDomain      string
 	proxyDomainParts []string
+
+	egressScope *LocalEgressScope
 }
 
 // Borrowed from https://github.com/coredns/coredns/blob/master/plugin/hosts/hostsfile.go
@@ -188,6 +190,9 @@ func (h *LocalDNSServer) ServeDNS(proxy *dnsProxy, w dns.ResponseWriter, req *dn
 				response.Rcode = dns.RcodeNameError
 			}
 		} else {
+			if h.egressScope != nil {
+				h.egressScope.Update(hostname)
+			}
 			// We did not find the host in our internal cache. Query upstream and return the response as is.
 			response = h.queryUpstream(proxy.upstreamClient, req)
 		}

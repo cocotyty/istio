@@ -369,6 +369,9 @@ var (
 	EnableTLSv2OnInboundPath = env.RegisterBoolVar("PILOT_SIDECAR_ENABLE_INBOUND_TLS_V2", true,
 		"If true, Pilot will set the TLS version on server side as TLSv1_2 and also enforce strong cipher suites").Get()
 
+	EnableDNSEgress = env.RegisterBoolVar("PILOT_DNS_EGRESS_ENABLE", true,
+		"If true, Pilot will set the TLS version on server side as TLSv1_2 and also enforce strong cipher suites").Get()
+
 	XdsPushSendTimeout = env.RegisterDurationVar(
 		"PILOT_XDS_SEND_TIMEOUT",
 		5*time.Second,

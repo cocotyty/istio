@@ -17,6 +17,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"istio.io/istio/pilot/pkg/dns/store"
 	"net/url"
 	"os"
 	"path"
@@ -259,7 +260,9 @@ func (s *Server) initConfigSources(args *PilotArgs) (err error) {
 		clients = append(clients, mcpClient)
 		s.ConfigStores = append(s.ConfigStores, mcpController)
 	}
-
+	if features.EnableDNSEgress {
+		s.ConfigStores = append(s.ConfigStores, store.EgressStore())
+	}
 	s.addStartFunc(func(stop <-chan struct{}) error {
 		var wg sync.WaitGroup
 
