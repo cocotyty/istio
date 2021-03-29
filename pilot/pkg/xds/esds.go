@@ -52,7 +52,10 @@ func (e *EsdsGenerator) Generate(proxy *model.Proxy, push *model.PushContext, w 
 	if proxy.Type != model.SidecarProxy {
 		return nil
 	}
-	hosts := proxy.DNSEgressSidecarScope.EgressListeners[0].IstioListener.Hosts
+	var hosts []string
+	if proxy.DNSEgressSidecarScope != nil && len(proxy.DNSEgressSidecarScope.EgressListeners) > 0 {
+		hosts = proxy.DNSEgressSidecarScope.EgressListeners[0].IstioListener.Hosts
+	}
 	return model.Resources{
 		util.MessageToAny(
 			&istio_networking_nds_v1.EgressScope{Hosts: hosts},
