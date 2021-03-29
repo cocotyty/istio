@@ -113,6 +113,7 @@ func initXdsProxy(ia *Agent) (*XdsProxy, error) {
 		resetChan:      make(chan struct{}),
 		healthChecker:  health.NewWorkloadHealthChecker(ia.proxyConfig.ReadinessProbe),
 		agent:          ia,
+		handlers:       map[string]XDSHandler{},
 	}
 	if ia.scope != nil {
 		proxy.RegisterHandler(v3.EgressScopeType, ia.scope)
