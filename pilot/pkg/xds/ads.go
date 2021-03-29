@@ -176,17 +176,19 @@ func (s *DiscoveryServer) processRequest(req *discovery.DiscoveryRequest, con *C
 	if s.StatusReporter != nil {
 		s.StatusReporter.RegisterEvent(con.ConID, req.TypeUrl, req.ResponseNonce)
 	}
+	mustResp := false
 	if g := s.Generators[req.TypeUrl]; g != nil {
 		h, ok := g.(model.XdsRequestHandler)
 		if ok {
-			err := h.Handle(req, con.proxy)
+			var err error
+			mustResp, err = h.Handle(req, con.proxy)
 			if err != nil {
 				return err
 			}
 		}
 	}
 
-	if !s.shouldRespond(con, req) {
+	if !mustResp && !s.shouldRespond(con, req) {
 		return nil
 	}
 

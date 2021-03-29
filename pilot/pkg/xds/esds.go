@@ -30,14 +30,14 @@ type EsdsGenerator struct {
 	mu sync.Mutex
 }
 
-func (e *EsdsGenerator) Handle(req *discovery.DiscoveryRequest, proxy *model.Proxy) error {
+func (e *EsdsGenerator) Handle(req *discovery.DiscoveryRequest, proxy *model.Proxy) (bool, error) {
 	if proxy.Type != model.SidecarProxy {
-		return nil
+		return false, nil
 	}
 	names := proxy.Metadata.ProxyConfig.ProxyMetadata["ISTIO_META_SHARED_DNS_EGRESS_SCOPE"]
 	if names == "" {
 		log.Debug("ISTIO_META_SHARED_DNS_EGRESS_SCOPE is empty")
-		return nil
+		return true, nil
 	}
 	nameList := strings.Split(names, ",")
 	labels := make(map[string]string, len(nameList))
@@ -45,7 +45,7 @@ func (e *EsdsGenerator) Handle(req *discovery.DiscoveryRequest, proxy *model.Pro
 		labels[name] = proxy.Metadata.Labels[name]
 	}
 	store.AppendToEgressScope(labels, proxy.ConfigNamespace, req.ResourceNames...)
-	return nil
+	return true, nil
 }
 
 func (e *EsdsGenerator) Generate(proxy *model.Proxy, push *model.PushContext, w *model.WatchedResource, updates *model.PushRequest) model.Resources {
