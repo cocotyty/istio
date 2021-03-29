@@ -180,14 +180,15 @@ func (s *DiscoveryServer) processRequest(req *discovery.DiscoveryRequest, con *C
 	if g := s.Generators[req.TypeUrl]; g != nil {
 		h, ok := g.(model.XdsRequestHandler)
 		if ok {
-			var err error
-			err = h.Handle(req, con.proxy)
+			rebuild, err := h.Handle(req, con.proxy)
 			if err != nil {
 				return err
 			}
+			if rebuild {
+				s.updateProxy(con.proxy, s.globalPushContext())
+			}
 		}
 	}
-
 	if !s.shouldRespond(con, req) {
 		return nil
 	}
