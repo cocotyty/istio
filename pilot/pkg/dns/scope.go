@@ -119,6 +119,7 @@ const debounceTime = time.Millisecond * 20
 const maxDebounceTime = time.Millisecond * 100
 
 func (l *LocalEgressScope) loopSend() error {
+	log.Debug("start send loop")
 	maxTimer := time.NewTimer(maxDebounceTime)
 	timer := time.NewTimer(debounceTime)
 	var ws []chan struct{}
@@ -130,11 +131,13 @@ func (l *LocalEgressScope) loopSend() error {
 		l.mu.Lock()
 		l.ws = append(l.ws, ws...)
 		l.mu.Unlock()
+		ws = nil
 	}
 	for {
 		select {
 		case w := <-l.queue:
 			ws = append(ws, w)
+			log.Debug("new hosts request")
 			if !timer.Stop() {
 				<-timer.C
 			}
@@ -148,6 +151,10 @@ func (l *LocalEgressScope) loopSend() error {
 		case <-maxTimer.C:
 			send()
 			maxTimer.Reset(maxDebounceTime)
+			if !timer.Stop() {
+				<-timer.C
+			}
+			timer.Reset(debounceTime)
 		}
 	}
 }
