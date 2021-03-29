@@ -17,7 +17,7 @@ func NewLocalEgressScope() *LocalEgressScope {
 		scope:    map[string]bool{},
 		mu:       sync.RWMutex{},
 		waitSync: map[string]bool{},
-		queue:    make(chan chan struct{}, 1),
+		queue:    make(chan chan struct{}, 100),
 	}
 	go le.loopSend()
 	return le
@@ -133,6 +133,7 @@ func (l *LocalEgressScope) loopSend() error {
 		l.mu.Unlock()
 		ws = nil
 	}
+	defer log.Debug("stop send loop")
 	for {
 		select {
 		case w := <-l.queue:

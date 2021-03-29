@@ -37,7 +37,7 @@ func init() {
 
 func initDNS() error {
 	var err error
-	testAgentDNS, err = NewLocalDNSServer("ns1", "ns1.svc.cluster.local")
+	testAgentDNS, err = NewLocalDNSServer("ns1", "ns1.svc.cluster.local", nil)
 	if err != nil {
 		return err
 	}
