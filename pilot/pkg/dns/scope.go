@@ -53,6 +53,7 @@ func (l *LocalEgressScope) sendRequest() {
 		hosts = append(hosts, host)
 	}
 	l.waitSync = map[string]bool{}
+	send := l.send
 	l.mu.Unlock()
 	log.Debugf("local egress scope send request: %v", hosts)
 	req := &discovery.DiscoveryRequest{
@@ -60,7 +61,9 @@ func (l *LocalEgressScope) sendRequest() {
 		TypeUrl:       v3.EgressScopeType,
 		ResponseNonce: l.nonce,
 	}
-	l.send(req)
+	if send != nil {
+		l.send(req)
+	}
 }
 
 func (l *LocalEgressScope) HandleResponse(resp *discovery.DiscoveryResponse) (stop bool, err error) {
@@ -102,7 +105,11 @@ func (l *LocalEgressScope) Update(host string) error {
 	ch := make(chan struct{}, 1)
 	timeout := time.NewTimer(time.Second * 2)
 	log.Debug("add host to egress scope:", host)
-	l.queue <- ch
+	l.sendRequest()
+	l.mu.Lock()
+	l.ws = append(l.ws, ch)
+	l.mu.Unlock()
+
 	select {
 	case <-ch:
 		if !timeout.Stop() {
