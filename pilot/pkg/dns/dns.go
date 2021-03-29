@@ -71,9 +71,10 @@ const (
 	defaultTTLInSeconds = 30
 )
 
-func NewLocalDNSServer(proxyNamespace, proxyDomain string) (*LocalDNSServer, error) {
+func NewLocalDNSServer(proxyNamespace, proxyDomain string, egressScope *LocalEgressScope) (*LocalDNSServer, error) {
 	h := &LocalDNSServer{
 		proxyNamespace: proxyNamespace,
+		egressScope:    egressScope,
 	}
 
 	// proxyDomain could contain the namespace making it redundant.

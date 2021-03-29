@@ -6,6 +6,7 @@ import (
 	"golang.org/x/sync/singleflight"
 	istio_networking_nds_v1 "istio.io/istio/pilot/pkg/proto"
 	v3 "istio.io/istio/pilot/pkg/xds/v3"
+	"istio.io/pkg/log"
 	"strings"
 	"sync"
 	"time"
@@ -51,6 +52,7 @@ func (l *LocalEgressScope) sendRequest() {
 	}
 	l.waitSync = map[string]bool{}
 	l.mu.Unlock()
+	log.Debugf("local egress scope send request: %v", hosts)
 	req := &discovery.DiscoveryRequest{
 		ResourceNames: hosts,
 		TypeUrl:       v3.EgressScopeType,
@@ -83,10 +85,12 @@ func (l *LocalEgressScope) Update(host string) error {
 	if !isClusterService(host) {
 		return nil
 	}
+
 	l.mu.RLock()
 	exist := l.scope[host]
 	l.mu.RUnlock()
 	if exist {
+		log.Debug("host already exist:", host)
 		return nil
 	}
 	l.mu.Lock()
@@ -95,11 +99,17 @@ func (l *LocalEgressScope) Update(host string) error {
 
 	ch := make(chan struct{}, 1)
 	timeout := time.NewTimer(time.Second * 2)
+	log.Debug("add host to egress scope:", host)
 	l.queue <- ch
 	select {
 	case <-ch:
+		if !timeout.Stop() {
+			<-timeout.C
+		}
 	case <-timeout.C:
+		log.Debug("wait timeout")
 	}
+	log.Debug("add host to egress scope done:", host)
 	return nil
 }
 
@@ -141,6 +151,7 @@ func (l *LocalEgressScope) loopSend() error {
 }
 
 func (l *LocalEgressScope) handleResponse(hosts []string) {
+	log.Debugf("handle response: %v", hosts)
 	m := make(map[string]bool, len(hosts))
 	for _, host := range hosts {
 		m[host] = true

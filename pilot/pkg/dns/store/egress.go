@@ -6,6 +6,7 @@ import (
 	"istio.io/istio/pilot/pkg/dns/schemas"
 	"istio.io/istio/pilot/pkg/model"
 	"istio.io/istio/pkg/config"
+	"istio.io/pkg/log"
 	"sort"
 	"sync"
 )
@@ -18,6 +19,7 @@ func EgressStore() model.ConfigStoreCache {
 }
 
 func AppendToEgressScope(labels map[string]string, namespace string, hosts ...string) {
+	log.Debug("append %v to egress scope [%s/%v]", hosts, labels, namespace)
 	egressStoreLocker.Lock()
 	defer egressStoreLocker.Unlock()
 	nameList := make([]string, 0, len(labels))

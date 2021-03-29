@@ -114,7 +114,9 @@ func initXdsProxy(ia *Agent) (*XdsProxy, error) {
 		healthChecker:  health.NewWorkloadHealthChecker(ia.proxyConfig.ReadinessProbe),
 		agent:          ia,
 	}
-
+	if ia.scope != nil {
+		proxy.RegisterHandler(v3.EgressScopeType, ia.scope)
+	}
 	proxyLog.Infof("Initializing with upstream address %s and cluster %s", proxy.istiodAddress, proxy.clusterID)
 
 	if err = proxy.initDownstreamServer(); err != nil {
@@ -151,6 +153,10 @@ func initXdsProxy(ia *Agent) (*XdsProxy, error) {
 		proxy.SendRequest(req)
 	}, proxy.stopChan)
 	return proxy, nil
+}
+
+func (p *XdsProxy) RegisterHandler(name string, handler XDSHandler) {
+	p.handlers[name] = handler
 }
 
 // SendRequest sends a request to the currently connected proxy

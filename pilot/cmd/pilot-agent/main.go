@@ -149,7 +149,8 @@ var (
 	// This is a copy of the env var in the init code.
 	dnsCaptureByAgent = env.RegisterBoolVar("ISTIO_META_DNS_CAPTURE", false,
 		"If set to true, enable the capture of outgoing DNS packets on port 53, redirecting to istio-agent on :15053").Get()
-
+	sharedDNSEgressScope = env.RegisterStringVar("ISTIO_META_SHARED_DNS_EGRESS_SCOPE", "",
+		"The labels of shared DNS Egress Scope. If exist ,listeners will load on demand.").Get()
 	rootCmd = &cobra.Command{
 		Use:          "pilot-agent",
 		Short:        "Istio Pilot agent.",
@@ -299,6 +300,7 @@ var (
 			if proxyXDSViaAgent {
 				agentConfig.ProxyXDSViaAgent = true
 				agentConfig.DNSCapture = dnsCaptureByAgent
+				agentConfig.SharedDNSEgressScope = sharedDNSEgressScope
 				agentConfig.ProxyNamespace = podNamespace
 				agentConfig.ProxyDomain = role.DNSDomain
 			}

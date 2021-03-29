@@ -112,6 +112,8 @@ type Agent struct {
 
 	// local DNS Server that processes DNS requests locally and forwards to upstream DNS if needed.
 	localDNSServer *dns.LocalDNSServer
+	// local egress scope
+	scope *dns.LocalEgressScope
 }
 
 // AgentConfig contains additional config for the agent, not included in ProxyConfig.
@@ -126,6 +128,10 @@ type AgentConfig struct {
 	// DNSCapture indicates if the XDS proxy has dns capture enabled or not
 	// This option will not be considered if proxyXDSViaAgent is false.
 	DNSCapture bool
+
+	// SharedDNSEgressScope is the SharedDNSEgressScope labels.
+	SharedDNSEgressScope string
+
 	// ProxyNamespace to use for local dns resolution
 	ProxyNamespace string
 	// ProxyDomain is the DNS domain associated with the proxy (assumed
@@ -275,7 +281,10 @@ func (sa *Agent) Start(isSidecar bool, podNamespace string) (*sds.Server, error)
 func (sa *Agent) initLocalDNSServer(isSidecar bool) (err error) {
 	// we dont need dns server on gateways
 	if sa.cfg.DNSCapture && sa.cfg.ProxyXDSViaAgent && isSidecar {
-		if sa.localDNSServer, err = dns.NewLocalDNSServer(sa.cfg.ProxyNamespace, sa.cfg.ProxyDomain); err != nil {
+		if sa.cfg.SharedDNSEgressScope != "" {
+			sa.scope = dns.NewLocalEgressScope()
+		}
+		if sa.localDNSServer, err = dns.NewLocalDNSServer(sa.cfg.ProxyNamespace, sa.cfg.ProxyDomain, sa.scope); err != nil {
 			return err
 		}
 		sa.localDNSServer.StartDNS()

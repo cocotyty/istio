@@ -20,6 +20,7 @@ import (
 	"istio.io/istio/pilot/pkg/model"
 	"istio.io/istio/pilot/pkg/networking/util"
 	istio_networking_nds_v1 "istio.io/istio/pilot/pkg/proto"
+	"istio.io/pkg/log"
 	"strings"
 	"sync"
 )
@@ -34,6 +35,10 @@ func (e *EsdsGenerator) Handle(req *discovery.DiscoveryRequest, proxy *model.Pro
 		return nil
 	}
 	names := proxy.Metadata.ProxyConfig.ProxyMetadata["ISTIO_META_SHARED_DNS_EGRESS_SCOPE"]
+	if names == "" {
+		log.Debug("ISTIO_META_SHARED_DNS_EGRESS_SCOPE is empty")
+		return nil
+	}
 	nameList := strings.Split(names, ",")
 	labels := make(map[string]string, len(nameList))
 	for _, name := range nameList {
