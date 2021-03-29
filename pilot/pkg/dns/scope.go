@@ -67,6 +67,9 @@ func (l *LocalEgressScope) sendRequest() {
 }
 
 func (l *LocalEgressScope) HandleResponse(resp *discovery.DiscoveryResponse) (stop bool, err error) {
+	l.mu.Lock()
+	l.nonce = resp.Nonce
+	l.mu.Unlock()
 	for _, resource := range resp.Resources {
 		scope := &istio_networking_nds_v1.EgressScope{}
 		_ = resource.UnmarshalTo(scope)
