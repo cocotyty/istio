@@ -164,7 +164,7 @@ type XdsResourceGenerator interface {
 }
 
 type XdsRequestHandler interface {
-	Handle(req *discovery.DiscoveryRequest, proxy *Proxy) (push bool, err error)
+	Handle(req *discovery.DiscoveryRequest, proxy *Proxy) (err error)
 }
 
 // Proxy contains information about an specific instance of a proxy (envoy sidecar, gateway,
