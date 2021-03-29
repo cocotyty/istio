@@ -1,31 +1,75 @@
 package dns
 
 import (
-	"regexp"
+	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
+	"golang.org/x/sync/singleflight"
+	istio_networking_nds_v1 "istio.io/istio/pilot/pkg/proto"
+	v3 "istio.io/istio/pilot/pkg/xds/v3"
 	"strings"
 	"sync"
 	"time"
 )
 
-func NewLocalEgressScope(sharedScopeName string) *LocalEgressScope {
+func NewLocalEgressScope() *LocalEgressScope {
 	return &LocalEgressScope{
-		scope:           map[string]bool{},
-		mu:              sync.RWMutex{},
-		sharedScopeName: sharedScopeName,
-		req:             make(chan *EgressScopeRequest, 1),
-		waiters:         map[string][]chan<- struct{}{},
+		scope:    map[string]bool{},
+		mu:       sync.RWMutex{},
+		waitSync: map[string]bool{},
+		queue:    make(chan chan struct{}, 1),
 	}
 }
 
 type LocalEgressScope struct {
-	scope           map[string]bool
-	mu              sync.RWMutex
-	sharedScopeName string
-	req             chan *EgressScopeRequest
-	waiters         map[string][]chan<- struct{}
+	queue    chan chan struct{}
+	scope    map[string]bool
+	waitSync map[string]bool
+	mu       sync.RWMutex
+	nonce    string
+	node     *core.Node
+	send     func(req *discovery.DiscoveryRequest)
+	group    singleflight.Group
+	ws       []chan struct{}
 }
 
-var hostNameReg = regexp.MustCompile(``)
+func (l *LocalEgressScope) OnConnect(node *core.Node, send func(req *discovery.DiscoveryRequest)) {
+	l.mu.Lock()
+	l.node = node
+	l.send = send
+	l.mu.Unlock()
+	l.sendRequest()
+}
+
+func (l *LocalEgressScope) sendRequest() {
+	l.mu.Lock()
+	hosts := make([]string, 0, len(l.scope)+len(l.waitSync))
+	for host := range l.scope {
+		hosts = append(hosts, host)
+	}
+	for host := range l.waitSync {
+		hosts = append(hosts, host)
+	}
+	l.waitSync = map[string]bool{}
+	l.mu.Unlock()
+	req := &discovery.DiscoveryRequest{
+		ResourceNames: hosts,
+		TypeUrl:       v3.EgressScopeType,
+		ResponseNonce: l.nonce,
+	}
+	l.send(req)
+}
+
+func (l *LocalEgressScope) HandleResponse(resp *discovery.DiscoveryResponse) (stop bool, err error) {
+	for _, resource := range resp.Resources {
+		scope := &istio_networking_nds_v1.EgressScope{}
+		_ = resource.UnmarshalTo(scope)
+		l.handleResponse(scope.Hosts)
+	}
+	return true, nil
+}
+
+func (l *LocalEgressScope) OnDisconnect() {
+}
 
 func isClusterService(host string) bool {
 	parts := strings.SplitN(host, ".", 3)
@@ -46,73 +90,68 @@ func (l *LocalEgressScope) Update(host string) error {
 		return nil
 	}
 	l.mu.Lock()
-	if l.scope[host] {
-		l.mu.Unlock()
-		return nil
-	}
-	ch := make(chan struct{}, 1)
-	waiters := append(l.waiters[host], ch)
-	l.waiters[host] = waiters
-	if len(waiters) == 1 {
-		l.req <- &EgressScopeRequest{
-			ScopeName: l.sharedScopeName,
-			Hosts:     []string{host},
-		}
-	}
+	l.waitSync[host] = true
 	l.mu.Unlock()
+
+	ch := make(chan struct{}, 1)
 	timeout := time.NewTimer(time.Second * 2)
+	l.queue <- ch
 	select {
-	case <-timeout.C:
-		l.mu.Lock()
-		waiters := l.waiters[host]
-		for i, c := range waiters {
-			if c != ch {
-				continue
-			}
-			waiters = append(waiters[:i], waiters[i+1:]...)
-			if len(waiters) == 0 {
-				delete(l.waiters, host)
-			} else {
-				l.waiters[host] = waiters
-			}
-		}
-		l.mu.Unlock()
-		return nil
 	case <-ch:
-		if !timeout.Stop() {
-			<-timeout.C
+	case <-timeout.C:
+	}
+	return nil
+}
+
+const debounceTime = time.Millisecond * 20
+const maxDebounceTime = time.Millisecond * 100
+
+func (l *LocalEgressScope) loopSend() error {
+	maxTimer := time.NewTimer(maxDebounceTime)
+	timer := time.NewTimer(debounceTime)
+	var ws []chan struct{}
+	send := func() {
+		if len(ws) == 0 {
+			return
 		}
-		return nil
+		l.sendRequest()
+		l.mu.Lock()
+		l.ws = append(l.ws, ws...)
+		l.mu.Unlock()
+	}
+	for {
+		select {
+		case w := <-l.queue:
+			ws = append(ws, w)
+			if !timer.Stop() {
+				<-timer.C
+			}
+			timer.Reset(debounceTime)
+		case <-timer.C:
+			send()
+			if !maxTimer.Stop() {
+				<-maxTimer.C
+			}
+			maxTimer.Reset(maxDebounceTime)
+		case <-maxTimer.C:
+			send()
+			maxTimer.Reset(maxDebounceTime)
+		}
 	}
 }
 
-type EgressScopeRequest struct {
-	ScopeName string
-	Hosts     []string
-}
-
-type EgressScopeResponse EgressScopeRequest
-
-func (l *LocalEgressScope) Request() (req <-chan *EgressScopeRequest) {
-	return l.req
-}
-
-func (l *LocalEgressScope) Response(resp *EgressScopeResponse) {
-	m := make(map[string]bool, len(resp.Hosts))
-	for _, host := range resp.Hosts {
+func (l *LocalEgressScope) handleResponse(hosts []string) {
+	m := make(map[string]bool, len(hosts))
+	for _, host := range hosts {
 		m[host] = true
 	}
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	l.scope = m
-	for host := range m {
-		waiters := l.waiters[host]
-		if len(waiters) == 0 {
-			continue
-		}
-		delete(l.waiters, host)
-		for _, w := range waiters {
-			w <- struct{}{}
-		}
+	ws := l.ws
+	l.ws = nil
+	l.mu.Unlock()
+
+	for _, w := range ws {
+		w <- struct{}{}
 	}
 }

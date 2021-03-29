@@ -20,6 +20,8 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	"github.com/gogo/protobuf/proto"
 	"io"
 	"io/ioutil"
 	"math"
@@ -94,6 +96,8 @@ type XdsProxy struct {
 	// connected stores the active gRPC stream. The proxy will only have 1 connection at a time
 	connected      *ProxyConnection
 	connectedMutex sync.RWMutex
+
+	handlers map[string]XDSHandler
 }
 
 var proxyLog = log.RegisterScope("xdsproxy", "XDS Proxy in Istio Agent", 0)
@@ -212,6 +216,10 @@ func (p *XdsProxy) StreamAggregatedResources(downstream discovery.AggregatedDisc
 				con.requestsChan <- &discovery.DiscoveryRequest{
 					TypeUrl: v3.NameTableType,
 				}
+				node := proto.Clone(req.Node).(*core.Node)
+				for _, handler := range p.handlers {
+					handler.OnConnect(node, p.SendRequest)
+				}
 				firstNDSSent = true
 			}
 		}
@@ -320,6 +328,17 @@ func (p *XdsProxy) HandleUpstream(ctx context.Context, con *ProxyConnection, xds
 					ResponseNonce: resp.Nonce,
 				}
 			default:
+				h, ok := p.handlers[resp.TypeUrl]
+				if ok {
+					stop, err := h.HandleResponse(resp)
+					if err != nil {
+						proxyLog.Errorf("%s handle error: %v", resp.TypeUrl, err)
+						return err
+					}
+					if stop {
+						continue
+					}
+				}
 				// TODO: Validate the known type urls before forwarding them to Envoy.
 				if err := con.downstream.Send(resp); err != nil {
 					proxyLog.Errorf("downstream send error: %v", err)
