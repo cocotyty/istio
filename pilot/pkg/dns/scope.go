@@ -52,15 +52,14 @@ func (l *LocalEgressScope) sendRequest() {
 	for host := range l.waitSync {
 		hosts = append(hosts, host)
 	}
-	l.waitSync = map[string]bool{}
 	send := l.send
-	l.mu.Unlock()
-	log.Debugf("local egress scope send request: %v", hosts)
 	req := &discovery.DiscoveryRequest{
 		ResourceNames: hosts,
 		TypeUrl:       v3.EgressScopeType,
 		ResponseNonce: l.nonce,
 	}
+	l.mu.Unlock()
+	log.Debugf("local egress scope send request: %v", hosts)
 	if send != nil {
 		l.send(req)
 	}
