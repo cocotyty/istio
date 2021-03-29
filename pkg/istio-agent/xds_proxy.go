@@ -20,8 +20,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
-	"github.com/gogo/protobuf/proto"
 	"io"
 	"io/ioutil"
 	"math"
@@ -223,9 +221,8 @@ func (p *XdsProxy) StreamAggregatedResources(downstream discovery.AggregatedDisc
 				con.requestsChan <- &discovery.DiscoveryRequest{
 					TypeUrl: v3.NameTableType,
 				}
-				node := proto.Clone(req.Node).(*core.Node)
 				for _, handler := range p.handlers {
-					handler.OnConnect(node, p.SendRequest)
+					handler.OnConnect(req.Node, p.SendRequest)
 				}
 				firstNDSSent = true
 			}
