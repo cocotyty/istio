@@ -13,12 +13,14 @@ import (
 )
 
 func NewLocalEgressScope() *LocalEgressScope {
-	return &LocalEgressScope{
+	le := &LocalEgressScope{
 		scope:    map[string]bool{},
 		mu:       sync.RWMutex{},
 		waitSync: map[string]bool{},
 		queue:    make(chan chan struct{}, 1),
 	}
+	go le.loopSend()
+	return le
 }
 
 type LocalEgressScope struct {
