@@ -88,7 +88,9 @@ func (s *Server) initConfigController(args *PilotArgs) error {
 			return err2
 		}
 	}
-
+	if features.EnableDNSEgress {
+		s.ConfigStores = append(s.ConfigStores, store.EgressStore())
+	}
 	// If running in ingress mode (requires k8s), wrap the config controller.
 	if hasKubeRegistry(args.RegistryOptions.Registries) && meshConfig.IngressControllerMode != meshconfig.MeshConfig_OFF {
 		// Wrap the config controller with a cache.
@@ -260,9 +262,7 @@ func (s *Server) initConfigSources(args *PilotArgs) (err error) {
 		clients = append(clients, mcpClient)
 		s.ConfigStores = append(s.ConfigStores, mcpController)
 	}
-	if features.EnableDNSEgress {
-		s.ConfigStores = append(s.ConfigStores, store.EgressStore())
-	}
+
 	s.addStartFunc(func(stop <-chan struct{}) error {
 		var wg sync.WaitGroup
 

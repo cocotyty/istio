@@ -1342,6 +1342,7 @@ func (ps *PushContext) initDNSSidecarScopes(env *Environment) error {
 	if err != nil {
 		return err
 	}
+	log.Info("dns sidecars :", len(sidecarConfigs))
 	sortConfigByCreationTime(sidecarConfigs)
 	ps.dnsSidecarsByNamespace = make(map[string][]*SidecarScope, len(sidecarConfigs))
 	for _, sidecarConfig := range sidecarConfigs {
