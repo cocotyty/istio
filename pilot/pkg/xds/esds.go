@@ -57,6 +57,11 @@ func (e *EsdsGenerator) Generate(proxy *model.Proxy, push *model.PushContext, w 
 	if proxy.DNSEgressSidecarScope != nil && len(proxy.DNSEgressSidecarScope.EgressListeners) > 0 {
 		hosts = proxy.DNSEgressSidecarScope.EgressListeners[0].IstioListener.Hosts
 	}
+	for i, host := range hosts {
+		host = strings.TrimPrefix("*/", host)
+		host += "."
+		hosts[i] = host
+	}
 	log.Info("ESDS:Generate:Hosts:", hosts)
 	return model.Resources{
 		util.MessageToAny(
