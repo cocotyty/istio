@@ -36,7 +36,7 @@ func (e *EsdsGenerator) Handle(req *discovery.DiscoveryRequest, proxy *model.Pro
 	}
 	names := proxy.Metadata.ProxyConfig.ProxyMetadata["ISTIO_META_SHARED_DNS_EGRESS_SCOPE"]
 	if names == "" {
-		log.Debug("ISTIO_META_SHARED_DNS_EGRESS_SCOPE is empty")
+		log.Info("ISTIO_META_SHARED_DNS_EGRESS_SCOPE is empty")
 		return false, nil
 	}
 	nameList := strings.Split(names, ",")
@@ -53,11 +53,11 @@ func (e *EsdsGenerator) Generate(proxy *model.Proxy, push *model.PushContext, w 
 		return nil
 	}
 	var hosts []string
-	log.Debug("ESDS:Generate for:", proxy.ID)
+	log.Info("ESDS:Generate for:", proxy.ID)
 	if proxy.DNSEgressSidecarScope != nil && len(proxy.DNSEgressSidecarScope.EgressListeners) > 0 {
 		hosts = proxy.DNSEgressSidecarScope.EgressListeners[0].IstioListener.Hosts
 	}
-	log.Debug("ESDS:Generate:Hosts:", hosts)
+	log.Info("ESDS:Generate:Hosts:", hosts)
 	return model.Resources{
 		util.MessageToAny(
 			&istio_networking_nds_v1.EgressScope{Hosts: hosts},

@@ -19,7 +19,7 @@ func EgressStore() model.ConfigStoreCache {
 }
 
 func AppendToEgressScope(labels map[string]string, namespace string, hosts ...string) {
-	log.Debug("append %v to egress scope [%s/%v]", hosts, labels, namespace)
+	log.Info("append %v to egress scope [%s/%v]", hosts, labels, namespace)
 	egressStoreLocker.Lock()
 	defer egressStoreLocker.Unlock()
 	nameList := make([]string, 0, len(labels))
