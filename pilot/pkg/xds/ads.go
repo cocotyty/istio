@@ -196,6 +196,7 @@ func (s *DiscoveryServer) processRequest(req *discovery.DiscoveryRequest, con *C
 		return s.pushConnection(con, &Event{
 			pushRequest: &model.PushRequest{
 				Full: true,
+				Push: s.globalPushContext(),
 			},
 		})
 	}
