@@ -13,14 +13,12 @@ import (
 )
 
 func NewLocalEgressScope() *LocalEgressScope {
-	le := &LocalEgressScope{
+	return &LocalEgressScope{
 		scope:    map[string]bool{},
 		mu:       sync.RWMutex{},
 		waitSync: map[string]bool{},
 		queue:    make(chan chan struct{}, 100),
 	}
-	go le.loopSend()
-	return le
 }
 
 type LocalEgressScope struct {
@@ -122,51 +120,6 @@ func (l *LocalEgressScope) Update(host string) error {
 	}
 	log.Debug("add host to egress scope done:", host)
 	return nil
-}
-
-const debounceTime = time.Millisecond * 20
-const maxDebounceTime = time.Millisecond * 100
-
-func (l *LocalEgressScope) loopSend() error {
-	log.Debug("start send loop")
-	maxTimer := time.NewTimer(maxDebounceTime)
-	timer := time.NewTimer(debounceTime)
-	var ws []chan struct{}
-	send := func() {
-		if len(ws) == 0 {
-			return
-		}
-		l.sendRequest()
-		l.mu.Lock()
-		l.ws = append(l.ws, ws...)
-		l.mu.Unlock()
-		ws = nil
-	}
-	defer log.Debug("stop send loop")
-	for {
-		select {
-		case w := <-l.queue:
-			ws = append(ws, w)
-			log.Debug("new hosts request")
-			if !timer.Stop() {
-				<-timer.C
-			}
-			timer.Reset(debounceTime)
-		case <-timer.C:
-			send()
-			if !maxTimer.Stop() {
-				<-maxTimer.C
-			}
-			maxTimer.Reset(maxDebounceTime)
-		case <-maxTimer.C:
-			send()
-			maxTimer.Reset(maxDebounceTime)
-			if !timer.Stop() {
-				<-timer.C
-			}
-			timer.Reset(debounceTime)
-		}
-	}
 }
 
 func (l *LocalEgressScope) handleResponse(hosts []string) {

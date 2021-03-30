@@ -19,7 +19,7 @@ func EgressStore() model.ConfigStoreCache {
 	return egressStoreCache
 }
 
-func AppendToEgressScope(labels map[string]string, namespace string, hosts ...string) {
+func AppendToEgressScope(labels map[string]string, namespace string, hosts ...string) (changed bool) {
 	log.Infof("append %v to egress scope [%s/%v]", hosts, labels, namespace)
 	for i, host := range hosts {
 		host = "*/" + strings.TrimRight(host, ".")
@@ -38,6 +38,7 @@ func AppendToEgressScope(labels map[string]string, namespace string, hosts ...st
 	}
 	c := egressStoreCache.Get(schemas.EgressSidecarGVK, cfgName, namespace)
 	if c == nil {
+		changed = true
 		egressStoreCache.Create(config.Config{
 			Meta: config.Meta{
 				GroupVersionKind: schemas.EgressSidecarGVK,
@@ -53,22 +54,31 @@ func AppendToEgressScope(labels map[string]string, namespace string, hosts ...st
 		})
 	} else {
 		egress := c.Spec.(*networking.Sidecar).Egress[0]
-		egress.Hosts = appendHosts(egress.Hosts, hosts)
+		egress.Hosts, changed = mergeHosts(egress.Hosts, hosts)
 		egressStoreCache.Update(*c)
 	}
+	return changed
 }
 
-func appendHosts(hosts []string, more []string) []string {
+func mergeHosts(hosts []string, more []string) ([]string, bool) {
 	m := make(map[string]struct{}, len(hosts)+len(more))
 	for _, host := range hosts {
 		m[host] = struct{}{}
 	}
+	changed := false
 	for _, host := range more {
-		_, ok := m[host]
-		if !ok {
-			hosts = append(hosts, host)
-			m[host] = struct{}{}
+		if _, ok := m[host]; !ok {
+			changed = true
 		}
+		m[host] = struct{}{}
 	}
-	return hosts
+	if !changed {
+		return hosts, false
+	}
+	hosts = hosts[:0]
+	for host := range m {
+		hosts = append(hosts, host)
+	}
+	sort.Strings(hosts)
+	return hosts, true
 }

@@ -39,6 +39,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 
+	dnsschemas "istio.io/istio/pilot/pkg/dns/schemas"
 	"istio.io/istio/pilot/pkg/features"
 	"istio.io/istio/pilot/pkg/leaderelection"
 	"istio.io/istio/pilot/pkg/model"
@@ -842,6 +843,7 @@ func (s *Server) initRegistryEventHandlers() error {
 
 			s.configController.RegisterEventHandler(schema.Resource().GroupVersionKind(), configHandler)
 		}
+		s.configController.RegisterEventHandler(dnsschemas.EgressSidecarGVK, configHandler)
 	}
 
 	return nil

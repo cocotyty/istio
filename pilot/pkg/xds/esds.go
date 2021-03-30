@@ -30,7 +30,7 @@ type EsdsGenerator struct {
 	mu sync.Mutex
 }
 
-func (e *EsdsGenerator) Handle(req *discovery.DiscoveryRequest, proxy *model.Proxy) (bool, error) {
+func (e *EsdsGenerator) Handle(req *discovery.DiscoveryRequest, proxy *model.Proxy) (resp bool, err error) {
 	if proxy.Type != model.SidecarProxy {
 		return false, nil
 	}
@@ -44,8 +44,8 @@ func (e *EsdsGenerator) Handle(req *discovery.DiscoveryRequest, proxy *model.Pro
 	for _, name := range nameList {
 		labels[name] = proxy.Metadata.Labels[name]
 	}
-	store.AppendToEgressScope(labels, proxy.ConfigNamespace, req.ResourceNames...)
-	return true, nil
+	changed := store.AppendToEgressScope(labels, proxy.ConfigNamespace, req.ResourceNames...)
+	return !changed, nil
 }
 
 func (e *EsdsGenerator) Generate(proxy *model.Proxy, push *model.PushContext, w *model.WatchedResource, updates *model.PushRequest) model.Resources {
@@ -59,7 +59,9 @@ func (e *EsdsGenerator) Generate(proxy *model.Proxy, push *model.PushContext, w 
 	}
 	for i, host := range hosts {
 		host = strings.TrimPrefix(host, "*/")
-		host += "."
+		if host[len(host)-1] != '.' {
+			host += "."
+		}
 		hosts[i] = host
 	}
 	log.Info("ESDS:Generate:Hosts:", hosts)

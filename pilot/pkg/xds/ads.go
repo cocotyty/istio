@@ -176,29 +176,22 @@ func (s *DiscoveryServer) processRequest(req *discovery.DiscoveryRequest, con *C
 	if s.StatusReporter != nil {
 		s.StatusReporter.RegisterEvent(con.ConID, req.TypeUrl, req.ResponseNonce)
 	}
-	fullPush := false
+	shouldRespond := false
 	if g := s.Generators[req.TypeUrl]; g != nil {
 		h, ok := g.(model.XdsRequestHandler)
 		if ok {
-			fp, err := h.Handle(req, con.proxy)
+			var err error
+			shouldRespond, err = h.Handle(req, con.proxy)
 			if err != nil {
 				return err
-			}
-			if fp {
-				fullPush = true
 			}
 		}
 	}
 	if !s.shouldRespond(con, req) {
 		return nil
 	}
-	if fullPush {
-		return s.pushConnection(con, &Event{
-			pushRequest: &model.PushRequest{
-				Full: true,
-				Push: s.globalPushContext(),
-			},
-		})
+	if !shouldRespond {
+		return nil
 	}
 	push := s.globalPushContext()
 
