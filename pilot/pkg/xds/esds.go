@@ -58,7 +58,7 @@ func (e *EsdsGenerator) Generate(proxy *model.Proxy, push *model.PushContext, w 
 		hosts = proxy.DNSEgressSidecarScope.EgressListeners[0].IstioListener.Hosts
 	}
 	for i, host := range hosts {
-		host = strings.TrimPrefix("*/", host)
+		host = strings.TrimPrefix(host, "*/")
 		host += "."
 		hosts[i] = host
 	}

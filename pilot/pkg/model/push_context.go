@@ -766,14 +766,14 @@ func (ps *PushContext) getDNSSidecarScope(proxy *Proxy, workloadLabels labels.Co
 						continue
 					}
 				}
-
+				log.Infof("getDNSSidecarScope for %s %v", proxy.ID, wrapper.Config)
 				// it is guaranteed sidecars with selectors are put in front
 				// and the sidecars are sorted by creation timestamp,
 				// return exact/wildcard matching one directly
 				return wrapper
 			}
 			// this happens at last, it is the default sidecar scope
-			return wrapper
+			return nil
 		}
 	}
 	return nil
