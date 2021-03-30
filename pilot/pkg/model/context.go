@@ -683,8 +683,8 @@ func (node *Proxy) SetSidecarScope(ps *PushContext) {
 
 	if node.Type == SidecarProxy {
 		workloadLabels := labels.Collection{node.Metadata.Labels}
-		node.SidecarScope = ps.getSidecarScope(node, workloadLabels)
 		node.DNSEgressSidecarScope = ps.getDNSSidecarScope(node, workloadLabels)
+		node.SidecarScope = ps.getSidecarScope(node, workloadLabels)
 	} else {
 		// Gateways should just have a default scope with egress: */*
 		node.SidecarScope = DefaultSidecarScopeForNamespace(ps, node.ConfigNamespace)

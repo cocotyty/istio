@@ -739,13 +739,12 @@ func (ps *PushContext) getSidecarScope(proxy *Proxy, workloadLabels labels.Colle
 				// return exact/wildcard matching one directly
 				return wrapper
 			}
+			if proxy.DNSEgressSidecarScope != nil {
+				return proxy.DNSEgressSidecarScope
+			}
 			// this happens at last, it is the default sidecar scope
 			return wrapper
 		}
-	}
-	wrapper := ps.getDNSSidecarScope(proxy, workloadLabels)
-	if wrapper != nil {
-		return wrapper
 	}
 	return DefaultSidecarScopeForNamespace(ps, proxy.ConfigNamespace)
 }
@@ -772,8 +771,6 @@ func (ps *PushContext) getDNSSidecarScope(proxy *Proxy, workloadLabels labels.Co
 				// return exact/wildcard matching one directly
 				return wrapper
 			}
-			// this happens at last, it is the default sidecar scope
-			return nil
 		}
 	}
 	return nil
@@ -1337,7 +1334,7 @@ func (ps *PushContext) initDefaultExportMaps() {
 	}
 }
 
-func (ps *PushContext) initDNSSidecarScopes(env *Environment) error {
+func (ps *PushContext) initDNSSidecarScopes(env *Environment, defaultNSConfig map[string]*networking.Sidecar, rootConfig *config.Config) error {
 	sidecarConfigs, err := env.List(schemas.EgressSidecarGVK, NamespaceAll)
 	if err != nil {
 		return err
@@ -1346,21 +1343,26 @@ func (ps *PushContext) initDNSSidecarScopes(env *Environment) error {
 	sortConfigByCreationTime(sidecarConfigs)
 	ps.dnsSidecarsByNamespace = make(map[string][]*SidecarScope, len(sidecarConfigs))
 	for _, sidecarConfig := range sidecarConfigs {
-		sidecarConfig := sidecarConfig
+		sidecarConfig := sidecarConfig.DeepCopy()
+		sidecar := sidecarConfig.Spec.(*networking.Sidecar).DeepCopy()
+		d, ok := defaultNSConfig[sidecarConfig.Namespace]
+		if ok {
+			sidecar.Egress = append(sidecar.Egress, d.Egress...)
+		} else if rootConfig != nil {
+			rtSidecar := rootConfig.Spec.(*networking.Sidecar)
+			sidecar.Egress = append(sidecar.Egress, rtSidecar.Egress...)
+		}
 		ps.dnsSidecarsByNamespace[sidecarConfig.Namespace] = append(ps.dnsSidecarsByNamespace[sidecarConfig.Namespace],
 			ConvertToSidecarScope(ps, &sidecarConfig, sidecarConfig.Namespace))
 	}
 	return nil
 }
 
-func (ps *PushContext) getMatchedDNSHosts(namespace string, selector map[string]string) *networking.IstioEgressListener {
-	sidecars, ok := ps.dnsSidecarsByNamespace[namespace]
-	if !ok {
-		return nil
-	}
+func (ps *PushContext) getMatchedDNSHosts(env *Environment, namespace string, selector map[string]string) *networking.IstioEgressListener {
+	sidecars, _ := env.List(schemas.EgressSidecarGVK, namespace)
 	workloadLabels := labels.Collection{selector}
 	for _, sidecar := range sidecars {
-		nSidecar := sidecar.Config.Spec.(*networking.Sidecar)
+		nSidecar := sidecar.Spec.(*networking.Sidecar)
 		if workloadLabels.IsSupersetOf(nSidecar.WorkloadSelector.Labels) {
 			return nSidecar.Egress[0]
 		}
@@ -1381,10 +1383,6 @@ func (ps *PushContext) getMatchedDNSHosts(namespace string, selector map[string]
 // with the proxy and derive listeners/routes/clusters based on the sidecar
 // scope.
 func (ps *PushContext) initSidecarScopes(env *Environment) error {
-	if err := ps.initDNSSidecarScopes(env); err != nil {
-		return err
-	}
-
 	sidecarConfigs, err := env.List(gvk.Sidecar, NamespaceAll)
 	if err != nil {
 		return err
@@ -1394,17 +1392,19 @@ func (ps *PushContext) initSidecarScopes(env *Environment) error {
 
 	sidecarConfigWithSelector := make([]config.Config, 0)
 	sidecarConfigWithoutSelector := make([]config.Config, 0)
-	sidecarsWithoutSelectorByNamespace := make(map[string]struct{})
+	sidecarsWithoutSelectorByNamespace := make(map[string]*networking.Sidecar)
 	for _, sidecarConfig := range sidecarConfigs {
 		sidecar := sidecarConfig.Spec.(*networking.Sidecar)
 		if sidecar.WorkloadSelector != nil {
-			dnsHostsEgress := ps.getMatchedDNSHosts(sidecarConfig.Namespace, sidecar.WorkloadSelector.Labels)
+			dnsHostsEgress := ps.getMatchedDNSHosts(env, sidecarConfig.Namespace, sidecar.WorkloadSelector.Labels)
 			if dnsHostsEgress != nil {
+				sidecarConfig = sidecarConfig.DeepCopy()
+				sidecar := sidecarConfig.Spec.(*networking.Sidecar)
 				sidecar.Egress = append(sidecar.Egress, dnsHostsEgress)
 			}
 			sidecarConfigWithSelector = append(sidecarConfigWithSelector, sidecarConfig)
 		} else {
-			sidecarsWithoutSelectorByNamespace[sidecarConfig.Namespace] = struct{}{}
+			sidecarsWithoutSelectorByNamespace[sidecarConfig.Namespace] = sidecar.DeepCopy()
 			sidecarConfigWithoutSelector = append(sidecarConfigWithoutSelector, sidecarConfig)
 		}
 	}
@@ -1449,8 +1449,7 @@ func (ps *PushContext) initSidecarScopes(env *Environment) error {
 			ps.sidecarsByNamespace[ns] = append(ps.sidecarsByNamespace[ns], ConvertToSidecarScope(ps, rootNSConfig, ns))
 		}
 	}
-
-	return nil
+	return ps.initDNSSidecarScopes(env, sidecarsWithoutSelectorByNamespace, rootNSConfig)
 }
 
 // Split out of DestinationRule expensive conversions - once per push.
